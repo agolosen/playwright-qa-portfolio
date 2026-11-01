@@ -1,51 +1,43 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect } from './fixtures';
 
-async function login(page: Page, user = 'standard_user', pass = 'secret_sauce') {
-  await page.goto('/');
-  await page.getByTestId('username').fill(user);
-  await page.getByTestId('password').fill(pass);
-  await page.getByTestId('login-button').click();
-}
+test.describe('Login', () => {
+  test('valid user sees product list', async ({ loginPage, inventoryPage }) => {
+    await loginPage.open();
+    await loginPage.login('standard_user', 'secret_sauce');
+    await inventoryPage.expectLoaded();
+  });
 
-test('login: valid user sees product list', async ({ page }) => {
-  await login(page);
-  await expect(page).toHaveURL(/inventory\.html/);
-  await expect(page.getByTestId('title')).toHaveText('Products');
+  test('wrong password shows error', async ({ loginPage }) => {
+    await loginPage.open();
+    await loginPage.login('standard_user', 'wrong_password');
+    await loginPage.expectError('Username and password do not match');
+  });
+
+  test('locked out user is blocked', async ({ loginPage }) => {
+    await loginPage.open();
+    await loginPage.login('locked_out_user', 'secret_sauce');
+    await loginPage.expectError('locked out');
+  });
 });
 
-test('login: wrong password shows error', async ({ page }) => {
-  await login(page, 'standard_user', 'wrong_password');
-  await expect(page.getByTestId('error')).toContainText('Username and password do not match');
+test.describe('Inventory and cart', () => {
+  test('add item updates cart badge @smoke', async ({ loggedInInventory }) => {
+    await loggedInInventory.addToCart('sauce-labs-backpack');
+    await loggedInInventory.expectCartCount('1');
+  });
+
+  test('sort by price low to high', async ({ loggedInInventory }) => {
+    await loggedInInventory.sortBy('lohi');
+    const prices = await loggedInInventory.getPrices();
+    expect(prices).toEqual([...prices].sort((a, b) => a - b));
+  });
 });
 
-test('login: locked out user is blocked', async ({ page }) => {
-  await login(page, 'locked_out_user');
-  await expect(page.getByTestId('error')).toContainText('locked out');
-});
-
-test('cart: add item updates badge', async ({ page }) => {
-  await login(page);
-  await page.getByTestId('add-to-cart-sauce-labs-backpack').click();
-  await expect(page.getByTestId('shopping-cart-badge')).toHaveText('1');
-});
-
-test('inventory: sort by price low to high', async ({ page }) => {
-  await login(page);
-  await page.getByTestId('product-sort-container').selectOption('lohi');
-  const texts = await page.getByTestId('inventory-item-price').allTextContents();
-  const prices = texts.map((t) => parseFloat(t.replace('$', '')));
-  expect(prices).toEqual([...prices].sort((a, b) => a - b));
-});
-
-test('checkout: full purchase end-to-end', async ({ page }) => {
-  await login(page);
-  await page.getByTestId('add-to-cart-sauce-labs-backpack').click();
-  await page.getByTestId('shopping-cart-link').click();
-  await page.getByTestId('checkout').click();
-  await page.getByTestId('firstName').fill('Alla');
-  await page.getByTestId('lastName').fill('Golosenko');
-  await page.getByTestId('postalCode').fill('46500');
-  await page.getByTestId('continue').click();
-  await page.getByTestId('finish').click();
-  await expect(page.getByTestId('complete-header')).toHaveText('Thank you for your order!');
+test('full checkout end-to-end @smoke', async ({ loggedInInventory, checkoutPage }) => {
+  await loggedInInventory.addToCart('sauce-labs-backpack');
+  await loggedInInventory.openCart();
+  await checkoutPage.startCheckout();
+  await checkoutPage.fillInfo('Alla', 'Golosenko', '46500');
+  await checkoutPage.finish();
+  await checkoutPage.expectOrderComplete();
 });
