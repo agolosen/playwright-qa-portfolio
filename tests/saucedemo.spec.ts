@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 
 test.describe('Login', () => {
-  test('valid user sees product list', async ({ loginPage, inventoryPage }) => {
+  test('valid user sees product list @smoke', async ({ loginPage, inventoryPage }) => {
     await loginPage.open();
     await loginPage.login('standard_user', 'secret_sauce');
     await inventoryPage.expectLoaded();
